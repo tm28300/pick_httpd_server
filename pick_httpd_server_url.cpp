@@ -6,7 +6,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "openqm_httpd_server.h"
+#include "pick_httpd_server.h"
+#include "pick_httpd_server_config.h"
+#include "pick_httpd_server_logs.h"
 
 int check_folder_pattern (const char* folder_name, size_t folder_length, pcre *pattern_comp)
 {
@@ -14,24 +16,24 @@ int check_folder_pattern (const char* folder_name, size_t folder_length, pcre *p
 
    if (prce_status < 0) {
       if (prce_status != PCRE_ERROR_NOMATCH) {
-         char error_message_detail [52];
+         char error_message_detail [53];
 
          snprintf (error_message_detail, sizeof (error_message_detail), "Object name PCRE match failed with error %d", prce_status);
-         abort_message (error_message_detail);
+         PHSLogging::fatal (error_message_detail);
       }
       return false;
    }
    return true;
 }
 
-int extract_subroutine_name_from_url (const char *url, struct connection_info_struct *connection_info)
+int extract_subroutine_name_from_url (const char *url, std::string &subr, std::vector<std::string> &method_authorized, std::vector<std::string> param_authorized)
 {
    const char* uri_index = url;
    while (*uri_index == '/') {
       ++uri_index;
    }
    if (*uri_index == '\0') {
-      abort_message ("Can't access root path");
+      PHSLogging::fatal ("Can't access root path");
 #ifdef OHS_DEBUG
       printf ("url root path=%s\n", url);
 #endif
@@ -49,7 +51,7 @@ int extract_subroutine_name_from_url (const char *url, struct connection_info_st
 #endif
 
       if (folder_name == NULL) {
-         abort_message ("Full memory when extract url");
+         PHSLogging::fatal ("Full memory when extract url");
          return MHD_HTTP_INTERNAL_SERVER_ERROR;
       }
 
@@ -65,7 +67,7 @@ int extract_subroutine_name_from_url (const char *url, struct connection_info_st
          char error_message_detail [1024];
 
          snprintf (error_message_detail, sizeof (error_message_detail), "Folder/file name \"%s\" not found for url \"%s\"", folder_name, url);
-         abort_message (error_message_detail);
+         PHSLogging::fatal (error_message_detail);
          free (folder_name);
          return MHD_HTTP_NOT_FOUND;
       }
@@ -90,54 +92,28 @@ int extract_subroutine_name_from_url (const char *url, struct connection_info_st
 #endif
 
       if (url_config_find->subr != NULL) {
-         connection_info->subr = url_config_find->subr;
+         subr = url_config_find->subr;
       }
-      connection_info->method_authorized_length = url_config_find->method_length;
-      connection_info->method_authorized = url_config_find->method;
-      connection_info->get_param_authorized_length = url_config_find->get_param_length;
-      connection_info->get_param_authorized = url_config_find->get_param;
+      for (int method_num = 0 ; method_num < url_config_find->method_length ; ++method_num) {
+          method_authorized.push_back (url_config_find->method [method_num]);
+      }
+      for (int get_param_num = 0 ; get_param_num < url_config_find->get_param_length ; ++get_param_num) {
+          param_authorized.push_back (url_config_find->get_param [get_param_num]);
+      }
    }
    if (uri_index && *uri_index != '\0') {
       char error_message_detail [1024];
 
       snprintf (error_message_detail, sizeof (error_message_detail), "Url \"%s\" not found", url);
-      abort_message (error_message_detail);
+      PHSLogging::fatal (error_message_detail);
       return MHD_HTTP_NOT_FOUND;
    }
-   if (connection_info->subr == NULL) {
+   if (subr.empty ()) {
       char error_message_detail [1024];
 
       snprintf (error_message_detail, sizeof (error_message_detail), "Url \"%s\" found but without subroutine name", url);
-      abort_message (error_message_detail);
+      PHSLogging::fatal (error_message_detail);
       return MHD_HTTP_NOT_FOUND;
    }
    return 0;
-}
-
-bool check_method_authorized (const char *method, struct connection_info_struct *connection_info)
-{
-   if (connection_info->method_authorized_length < 0) {
-      // No control
-      return true;
-   }
-   for (int method_index = 0 ; method_index < connection_info->method_authorized_length ; ++method_index) {
-      if (strcasecmp (method, connection_info->method_authorized [method_index]) == 0) {
-         return true;
-      }
-   }
-   return false;
-}
-
-bool check_get_param_authorized (const char *key, struct connection_info_struct *connection_info)
-{
-   if (connection_info->get_param_authorized_length < 0) {
-      // No control
-      return true;
-   }
-   for (int get_param_index = 0 ; get_param_index < connection_info->get_param_authorized_length ; ++get_param_index) {
-      if (strcasecmp (key, connection_info->get_param_authorized [get_param_index]) == 0) {
-         return true;
-      }
-   }
-   return false;
 }

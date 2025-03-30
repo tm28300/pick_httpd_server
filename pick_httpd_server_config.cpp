@@ -1,30 +1,30 @@
-#include <libconfig.h>
 #include <pcre.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "openqm_httpd_server.h"
+#include "pick_httpd_server.h"
+#include "pick_httpd_server_config.h"
 
 // Declarations
 
 static void print_memory_full ();
 static void free_url_config (struct url_config_struct *url_config);
-static char *check_openqm_object_name (const char* object_name);
+static const char *check_pick_object_name (const char* object_name);
 static struct url_config_struct * read_url_config (config_setting_t *config_url_elem);
 
 // Constants
 
-static const char config_file_name [] = "/etc/openqm_httpd_server.cfg";
-static const char config_path_openqm_account [] = "openqm.account";
+static const char config_file_name [] = "/etc/pick_httpd_server.cfg";
+static const char config_path_pick_account [] = "pick.account";
 static const char config_path_httpd_port [] = "httpd.port";
 static const char pattern_object_name [] = "^[[:alpha:]][[:alnum:]._-]*$";
 
 // Globals variables
 
-config_t config_openqm_httpd_server;
-const char *config_openqm_account;
+config_t config_pick_httpd_server;
+std::string config_pick_account;
 int config_http_port;
 struct url_config_struct *first_url_config = NULL;
 
@@ -55,18 +55,18 @@ void free_url_config (struct url_config_struct *url_config)
    free (url_config);
 }
 
-char *check_openqm_object_name (const char* object_name)
+const char *check_pick_object_name (const char* object_name)
 {
    pcre *reg_exp;
    size_t nbcar_on = strlen (object_name);
    int prce_status;
    const char *error;
    int erroffset;
-   static const size_t error_message_detail_length;
+   static const size_t error_message_detail_length = 255;
 
    reg_exp = pcre_compile (pattern_object_name, 0, &error, &erroffset, NULL) ;
    if (reg_exp == NULL) {
-      char *error_message_detail = malloc (error_message_detail_length);
+      char *error_message_detail = (char*) malloc (error_message_detail_length);
 
       if (error_message_detail == NULL) {
          return "Memory full";
@@ -81,7 +81,7 @@ char *check_openqm_object_name (const char* object_name)
          return "Invalid object name";
       }
 
-      char *error_message_detail = malloc (error_message_detail_length);
+      char *error_message_detail = (char*) malloc (error_message_detail_length);
 
       if (error_message_detail == NULL) {
          return "Memory full";
@@ -89,14 +89,14 @@ char *check_openqm_object_name (const char* object_name)
       snprintf (error_message_detail, error_message_detail_length, "Object name PCRE match failed with error %d", prce_status);
       return error_message_detail;
    }
-   return 0;
+   return NULL;
 }
 
 struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
 {
    struct url_config_struct *new_url_config;
 
-   new_url_config = malloc (sizeof (struct url_config_struct));
+   new_url_config = (struct url_config_struct *) malloc (sizeof (struct url_config_struct));
    if (new_url_config == NULL) {
       print_memory_full ();
       return NULL;
@@ -142,10 +142,10 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
 
    // Check subr name
    if (new_url_config->subr != NULL) {
-      char *subr_name_error_message = check_openqm_object_name (new_url_config->subr);
+      const char *subr_name_error_message = check_pick_object_name (new_url_config->subr);
       if (subr_name_error_message != NULL) {
          fprintf (stderr, "Subroutine name (%s) error: %s\n", new_url_config->subr, subr_name_error_message);
-         free (subr_name_error_message);
+         // TODO free (subr_name_error_message); dans certains cas, utiliser C++ et les exceptions
          error_config = true;
       }
    }
@@ -160,13 +160,13 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
       else {
          new_url_config->method_length = (int) config_setting_length (config_url_method);
          if (new_url_config->method_length) {
-            new_url_config->method = malloc (sizeof (const char **) * new_url_config->method_length);
+            new_url_config->method = (const char**) malloc (sizeof (const char **) * new_url_config->method_length);
             if (new_url_config->method == NULL) {
                print_memory_full ();
                error_config = true;
             }
             else {
-               for (unsigned int method_index = 0 ; method_index < new_url_config->method_length ; ++method_index) {
+               for (int method_index = 0 ; method_index < new_url_config->method_length ; ++method_index) {
                   const char *method_elem = config_setting_get_string_elem (config_url_method, method_index);
                   if (method_elem == NULL) {
                      fprintf (stderr, "error reading method %d\n", method_index);
@@ -194,13 +194,13 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
       else {
          new_url_config->get_param_length = (int) config_setting_length (config_url_get_param);
          if (new_url_config->get_param_length) {
-            new_url_config->get_param = malloc (sizeof (const char **) * new_url_config->get_param_length);
+            new_url_config->get_param = (const char**) malloc (sizeof (const char **) * new_url_config->get_param_length);
             if (new_url_config->get_param == NULL) {
                print_memory_full ();
                error_config = true;
             }
             else {
-               for (unsigned int get_param_index = 0 ; get_param_index < new_url_config->get_param_length ; ++get_param_index) {
+               for (int get_param_index = 0 ; get_param_index < new_url_config->get_param_length ; ++get_param_index) {
                   const char *get_param_elem = config_setting_get_string_elem (config_url_get_param, get_param_index);
                   if (get_param_elem == NULL) {
                      fprintf (stderr, "error reading get_param %d\n", get_param_index);
@@ -271,19 +271,19 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
    return new_url_config;
 }
 
-bool ohs_config_read ()
+bool phs_config_read ()
 {
-   if (config_read_file (&config_openqm_httpd_server, config_file_name) != CONFIG_TRUE) {
-      fprintf (stderr, "Can't read configuration file %s:%d %s\n", config_file_name, config_error_line (&config_openqm_httpd_server), config_error_text (&config_openqm_httpd_server));
+   if (config_read_file (&config_pick_httpd_server, config_file_name) != CONFIG_TRUE) {
+      fprintf (stderr, "Can't read configuration file %s:%d %s\n", config_file_name, config_error_line (&config_pick_httpd_server), config_error_text (&config_pick_httpd_server));
       return false;
    }
    // httpd.port
-   if (config_lookup_int (&config_openqm_httpd_server, config_path_httpd_port, &config_http_port) != CONFIG_TRUE) {
-      fprintf (stderr, "Can't find configuration %s in file %s:%d %s\n", config_path_httpd_port, config_error_file (&config_openqm_httpd_server), config_error_line (&config_openqm_httpd_server), config_error_text (&config_openqm_httpd_server));
+   if (config_lookup_int (&config_pick_httpd_server, config_path_httpd_port, &config_http_port) != CONFIG_TRUE) {
+      fprintf (stderr, "Can't find configuration %s in file %s:%d %s\n", config_path_httpd_port, config_error_file (&config_pick_httpd_server), config_error_line (&config_pick_httpd_server), config_error_text (&config_pick_httpd_server));
       return false;
    }
    // httpd.env
-   config_setting_t *config_httpd_env = config_lookup (&config_openqm_httpd_server, "httpd.env");
+   config_setting_t *config_httpd_env = config_lookup (&config_pick_httpd_server, "httpd.env");
    if (config_httpd_env != NULL) {
       unsigned int env_count = config_setting_length (config_httpd_env);
 
@@ -308,18 +308,20 @@ bool ohs_config_read ()
          }
       }
    }
-   // openqm.account
-   if (config_lookup_string (&config_openqm_httpd_server, config_path_openqm_account, &config_openqm_account) != CONFIG_TRUE) {
-      fprintf (stderr, "Can't find configuration %s in file %s:%d %s\n", config_path_openqm_account, config_error_file (&config_openqm_httpd_server), config_error_line (&config_openqm_httpd_server), config_error_text (&config_openqm_httpd_server));
+   // pick.account
+   const char* string_pick_account;
+   if (config_lookup_string (&config_pick_httpd_server, config_path_pick_account, &string_pick_account) != CONFIG_TRUE) {
+      fprintf (stderr, "Can't find configuration %s in file %s:%d %s\n", config_path_pick_account, config_error_file (&config_pick_httpd_server), config_error_line (&config_pick_httpd_server), config_error_text (&config_pick_httpd_server));
       return false;
    }
-   if (!strlen (config_path_openqm_account)) {
+   config_pick_account = string_pick_account;
+   if (config_pick_account.empty ()) {
       fprintf (stderr, "OpenQM account not configured\n");
       return false;
    }
 
    // url
-   config_setting_t *config_url = config_lookup (&config_openqm_httpd_server, "url");
+   config_setting_t *config_url = config_lookup (&config_pick_httpd_server, "url");
    if (config_url == NULL) {
       fprintf (stderr, "Missing url configuration\n");
       return false;
@@ -349,7 +351,7 @@ bool ohs_config_read ()
    return true;
 }
 
-void ohs_config_free ()
+void phs_config_free ()
 {
    while (first_url_config != NULL) {
       struct url_config_struct *current_url_config = first_url_config;
