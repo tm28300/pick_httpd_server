@@ -1,4 +1,6 @@
-#include <pcre.h>
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+
 #include <libconfig.h>
 #include <microhttpd.h>
 #include <stdbool.h>
@@ -10,12 +12,13 @@
 #include "pick_httpd_server_config.h"
 #include "pick_httpd_server_logs.h"
 
-int check_folder_pattern (const char* folder_name, size_t folder_length, pcre *pattern_comp)
+int check_folder_pattern (const char* folder_name, size_t folder_length, pcre2_code *pattern_comp)
 {
-   int prce_status = pcre_exec (pattern_comp, NULL, folder_name, folder_length, 0, 0, NULL, 0);
-
+   pcre2_match_data *match_data = pcre2_match_data_create_from_pattern (pattern_comp, NULL);
+   int prce_status = pcre2_match (pattern_comp, (const unsigned char *) folder_name, folder_length, 0 /* startoffset */, 0 /*options*/, match_data, NULL);
+   pcre2_match_data_free (match_data);
    if (prce_status < 0) {
-      if (prce_status != PCRE_ERROR_NOMATCH) {
+      if (prce_status != PCRE2_ERROR_NOMATCH) {
          char error_message_detail [53];
 
          snprintf (error_message_detail, sizeof (error_message_detail), "Object name PCRE match failed with error %d", prce_status);
@@ -34,19 +37,19 @@ int extract_subroutine_name_from_url (const char *url, std::string &subr, std::v
    }
    if (*uri_index == '\0') {
       PHSLogging::fatal ("Can't access root path");
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
       printf ("url root path=%s\n", url);
 #endif
       return MHD_HTTP_NOT_FOUND;
    }
    struct url_config_struct *base_url_config = first_url_config;
-   while (base_url_config != NULL && *uri_index != '\0') {
+   while (base_url_config != NULL && uri_index != NULL && *uri_index != '\0') {
       // Find next part in url
       const char *uri_folder_end = strstr (uri_index, "/");
       size_t uri_folder_length = uri_folder_end == NULL ? strlen(uri_index) : uri_folder_end - uri_index;
 
       char *folder_name = strndup (uri_index, uri_folder_length);
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
       printf ("Analyze folder=%s\n", folder_name);
 #endif
 
@@ -71,7 +74,7 @@ int extract_subroutine_name_from_url (const char *url, std::string &subr, std::v
          free (folder_name);
          return MHD_HTTP_NOT_FOUND;
       }
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
       printf ("Find url config path=%s, sub_path=%p\n", url_config_find->path, url_config_find->sub_path);
 #endif
       free (folder_name);
@@ -82,7 +85,7 @@ int extract_subroutine_name_from_url (const char *url, std::string &subr, std::v
          }
       }
       base_url_config = url_config_find->sub_path;
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
       if (base_url_config == NULL) {
          printf ("Last folder in urls\n");
       }

@@ -1,13 +1,15 @@
 #include <libconfig.h>
 #include <vector>
 #include <string>
-#include <pcre.h>
+
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
 
 // Types
 
 struct url_config_struct {
    const char  *path;
-   pcre        *pattern_comp;
+   pcre2_code  *pattern_comp;
    const char  *subr;
    int          method_length;
    const char **method;

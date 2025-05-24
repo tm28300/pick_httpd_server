@@ -2,12 +2,9 @@
 #include <sstream>
 #include <cstring>
 
-#include <pcre.h>
-//#include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-//#include <qmdefs.h>
 #include <qmclilib.h>
 
 #include "pick_httpd_server.h"
@@ -266,7 +263,7 @@ enum MHD_Result pick_connection::process (void *cls,
 #endif
 
 #ifdef PHS_DEBUG
-         printf ("Calling to OpenQM\n");
+         printf ("Calling to OpenQM, routine %s\n", subr.c_str ());
 #endif
          char *char_req_header_in = strdup (req_header_in.c_str ());
          char *char_req_query_string = strdup (req_query_string.c_str ());
@@ -353,7 +350,7 @@ enum MHD_Result pick_connection::process (void *cls,
             pick_dynarray header_out_pda (resp_header_out);
             pick_dynarray header_out_fields (header_out_pda.extract (1));
             pick_dynarray header_out_values (header_out_pda.extract (2));
-            pick_dynarray::rang_num_t field_numbers_hout = header_out_fields.dcount (pick_dynarray::field_mark_string);
+            pick_dynarray::rang_num_t field_numbers_hout = header_out_fields.dcount (pick_dynarray::value_mark_string);
 
             for (pick_dynarray::rang_num_t field_number = 0 ; field_number < field_numbers_hout ; field_number++) 
             {
@@ -361,7 +358,7 @@ enum MHD_Result pick_connection::process (void *cls,
                std::string header_value = header_out_values.extract (1, field_number + 1, 1);
                MHD_add_response_header (response, header_field.c_str (), header_value.c_str ());
 #ifdef PHS_DEBUG
-               std::cerr << "Header out" << header_field << "=" << header_value << std::endl;
+               std::cerr << "Header out " << header_field << "=" << header_value << std::endl;
 #endif
             }
          }
@@ -633,10 +630,7 @@ enum MHD_Result pick_connection::send_response (struct MHD_Connection *connectio
 #ifdef PHS_DEBUG
       printf ("After queue response\n");
 #endif
-      MHD_destroy_response (response);
-#ifdef PHS_DEBUG
-      printf ("After destroy response\n");
-#endif
+      // La mémoire utilisée par response sera libérée par microhttpd après envoi de la réponse au client
    }
    return return_result;
 }

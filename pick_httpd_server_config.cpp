@@ -1,4 +1,3 @@
-#include <pcre.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +18,7 @@ static struct url_config_struct * read_url_config (config_setting_t *config_url_
 static const char config_file_name [] = "/etc/pick_httpd_server.cfg";
 static const char config_path_pick_account [] = "pick.account";
 static const char config_path_httpd_port [] = "httpd.port";
-static const char pattern_object_name [] = "^[[:alpha:]][[:alnum:]._-]*$";
+static const unsigned char pattern_object_name [] = "^[[:alpha:]][[:alnum:]._-]*$";
 
 // Globals variables
 
@@ -38,7 +37,7 @@ void print_memory_full ()
 void free_url_config (struct url_config_struct *url_config)
 {
    if (url_config->pattern_comp != NULL) {
-      pcre_free (url_config->pattern_comp);
+      pcre2_code_free (url_config->pattern_comp);
    }
    if (url_config->method != NULL) {
       free (url_config->method);
@@ -57,27 +56,28 @@ void free_url_config (struct url_config_struct *url_config)
 
 const char *check_pick_object_name (const char* object_name)
 {
-   pcre *reg_exp;
-   size_t nbcar_on = strlen (object_name);
+   pcre2_code *reg_exp;
    int prce_status;
-   const char *error;
-   int erroffset;
+   int error;
+   long unsigned int erroffset;
    static const size_t error_message_detail_length = 255;
 
-   reg_exp = pcre_compile (pattern_object_name, 0, &error, &erroffset, NULL) ;
+   reg_exp = pcre2_compile (pattern_object_name, PCRE2_ZERO_TERMINATED, 0 /* options */, &error, &erroffset, NULL) ;
    if (reg_exp == NULL) {
       char *error_message_detail = (char*) malloc (error_message_detail_length);
 
       if (error_message_detail == NULL) {
          return "Memory full";
       }
-      snprintf (error_message_detail, error_message_detail_length, "Object name PCRE compilation failed at offset %d: %s", erroffset, error);
+      snprintf (error_message_detail, error_message_detail_length, "Object name PCRE compilation failed at offset %lu: %d", erroffset, error);
       return error_message_detail;
    }
-   prce_status = pcre_exec (reg_exp, NULL, object_name, nbcar_on, 0, 0, NULL, 0);
-   pcre_free (reg_exp);
+   pcre2_match_data *match_data = pcre2_match_data_create_from_pattern (reg_exp, NULL);
+   prce_status = pcre2_match (reg_exp, (const unsigned char *) object_name, PCRE2_ZERO_TERMINATED, 0 /* startoffset */, 0 /* options */, match_data, NULL);
+   pcre2_match_data_free (match_data);
+   pcre2_code_free (reg_exp);
    if (prce_status < 0) {
-      if (prce_status == PCRE_ERROR_NOMATCH) {
+      if (prce_status == PCRE2_ERROR_NOMATCH) {
          return "Invalid object name";
       }
 
@@ -125,17 +125,17 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
       fprintf (stderr, "Either path (%s) or pattern (%s) must be present\n", new_url_config->path, pattern_string);
       error_config = true;
    }
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
    printf ("Find path=%s, pattern=%s\n", new_url_config->path, pattern_string);
 #endif
 
    if (pattern_string != NULL) {
-      const char *error;
-      int erroffset;
+      int error;
+      long unsigned int erroffset;
 
-      new_url_config->pattern_comp = pcre_compile (pattern_string, 0, &error, &erroffset, NULL);
+      new_url_config->pattern_comp = pcre2_compile ((const unsigned char *) pattern_string, PCRE2_ZERO_TERMINATED, 0 /* options */, &error, &erroffset, NULL);
       if (new_url_config->pattern_comp == NULL) {
-         fprintf (stderr, "PCRE compilation failed for pattern \"%s\" at offset %d: %s\n", pattern_string, erroffset, error);
+         fprintf (stderr, "PCRE compilation failed for pattern \"%s\" at offset %lu: %d\n", pattern_string, erroffset, error);
          error_config = true;
       }
    }
@@ -222,7 +222,7 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
       }
       else {
          unsigned int sub_path_length = config_setting_length (config_url_sub_path);
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
          printf ("Find %u sub_path\n", sub_path_length);
 #endif
          if (sub_path_length) {
@@ -256,7 +256,7 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
                   prev_sub_path_config = sub_path_config;
                }
             }
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
             printf ("Config->sub_path=%p\n", new_url_config->sub_path);
 #endif
          }
@@ -291,7 +291,7 @@ bool phs_config_read ()
          fprintf (stderr, "Incorrect url configuration type\n");
          return false;
       }
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
       printf ("Config httpd.env=%u\n", env_count);
 #endif
       for (unsigned int env_index = 0 ; env_index < env_count ; ++env_index) {
@@ -301,7 +301,7 @@ bool phs_config_read ()
             const char *value = config_setting_get_string (config_httpd_env_index);
             if (name != NULL && value != NULL) {
                setenv (name, value, true);
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
                printf ("Setenv %s=%s\n", name, value);
 #endif
             }
@@ -344,7 +344,7 @@ bool phs_config_read ()
          first_url_config = new_url_config;
       }
    }
-#ifdef OHS_DEBUG
+#ifdef PHS_DEBUG
    printf ("First config path=%s sub_path=%p\n", first_url_config->path, first_url_config->sub_path);
 #endif
 
