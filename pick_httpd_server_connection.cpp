@@ -26,6 +26,7 @@ static const char protocol_https [] = "https";
 pick_connection::pick_connection ()
    : connection_type (connection_t::GET),
    error_exception (NULL),
+   fetch_post_json (false),
    req_auth_type (NULL),
    req_hostname (NULL),
    req_remote_user (NULL),
@@ -82,9 +83,16 @@ enum MHD_Result pick_connection::pick_to_connection (void *cls,
       current_pick_connection = (pick_connection*) *pick_connection_cls;
 
       if (current_pick_connection->connection_type != connection_t::GET && *upload_data_size != 0) {
-         MHD_post_process (current_pick_connection->post_processor,
-               upload_data,
-               *upload_data_size);
+         if (current_pick_connection->fetch_post_json) {
+            if (!current_pick_connection->post_json_process (upload_data, *upload_data_size)) {
+               return MHD_NO;
+            }
+         }
+         else {
+            MHD_post_process (current_pick_connection->post_processor,
+                  upload_data,
+                  *upload_data_size);
+         }
          *upload_data_size = 0;
          result = MHD_YES;
       }
@@ -167,12 +175,28 @@ enum MHD_Result pick_connection::initialize (void *cls,
       else {
          connection_type = connection_t::POST;
       }
-      post_processor = MHD_create_post_processor (connection,
-            post_buffer_size,
-            iterate_post,
-            (void *) this);
-      if (post_processor == NULL) {
-         return MHD_NO;
+
+      const char *content_type = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, "Content-Type");
+
+#ifdef PHS_DEBUG
+      std::cerr << "content_type=\"" << content_type << "\"" << std::endl;
+#endif
+
+      if (content_type != NULL && strcmp (content_type, "application/json") == 0) {
+         fetch_post_json = true;
+      }
+      else {
+#ifdef PHS_DEBUG
+         printf ("Create post processor\n");
+#endif
+         post_processor = MHD_create_post_processor (connection,
+               post_buffer_size,
+               iterate_post,
+               (void *) this);
+         if (post_processor == NULL) {
+            PHSLogging::fatal ("Can't create post processor");
+            return MHD_NO;
+         }
       }
    }
 
@@ -210,6 +234,27 @@ enum MHD_Result pick_connection::iterate_post (void *postinfo_cls,
    return MHD_YES;
 }
 
+bool pick_connection::post_json_process (const char *upload_data, size_t upload_data_size)
+{
+   try {
+      size_t new_len = post_dynarray.length () + upload_data_size + 1; // 1 = \0 de fin
+
+      if (new_len > post_max_size) {
+         set_error_exception (new std::length_error ("Post data too big"));
+         return false;
+      }
+      post_dynarray += std::string (upload_data, upload_data_size);
+   }
+   catch (const std::bad_alloc& e) {
+      set_error_exception (new std::bad_alloc (e));
+      return false;
+   }
+   catch (const std::exception& e) {
+      set_error_exception (new std::exception (e));
+      return false;
+   }
+   return true;
+}
 
 enum MHD_Result pick_connection::process (void *cls,
       struct MHD_Connection *connection,
@@ -343,6 +388,7 @@ enum MHD_Result pick_connection::process (void *cls,
             // Complete web page
             response = MHD_create_response_from_buffer (strlen (resp_http_output), resp_http_output, MHD_RESPMEM_MUST_FREE);
             if (response == NULL) {
+               PHSLogging::fatal ("Can't create response from subroutine response");
                http_status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
             }
 

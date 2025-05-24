@@ -65,6 +65,7 @@ private:
          size_t size);
    static enum MHD_Result iterate_header (void *headerininfo_cls, enum MHD_ValueKind kind, const char *key, const char *value);
    static enum MHD_Result iterate_querystring (void *quertystringinfo_cls, enum MHD_ValueKind kind, const char *key, const char *value);
+   bool post_json_process (const char *upload_data, size_t upload_data_size);
 
    struct MHD_Response *make_default_error_page (struct MHD_Connection *connection, http_sc_t http_return_code) const;
    MHD_Result send_response (struct MHD_Connection *connection, http_sc_t http_return_code, struct MHD_Response *response) const;
@@ -79,6 +80,7 @@ private:
    connection_t connection_type;
    std::exception *error_exception;
    pick_dynarray post_dynarray;
+   bool fetch_post_json;
 
    char *req_auth_type;
    char *req_hostname;

@@ -1,5 +1,9 @@
 #include <string>
 
+#ifdef PHS_DEBUG
+#include <iostream>
+#endif
+
 #include <Poco/Util/HelpFormatter.h>
 
 #include "pick_httpd_server_logs.h"
@@ -29,6 +33,9 @@ PHSLogging::PHSLogging ()
 
 void PHSLogging::fatal (const std::string& message)
 {
+#ifdef PHS_DEBUG
+   std::cerr << "Log fatal: \"" << message << "\"" << std::endl;
+#endif
    if (myLogging.rootLogger) {
       myLogging.rootLogger->fatal (message);
    }
@@ -36,6 +43,9 @@ void PHSLogging::fatal (const std::string& message)
 
 void PHSLogging::critical (const std::string& message)
 {
+#ifdef PHS_DEBUG
+   std::cerr << "Log critical: \"" << message << "\"" << std::endl;
+#endif
    if (myLogging.rootLogger) {
       myLogging.rootLogger->critical(message);
    }
@@ -43,6 +53,9 @@ void PHSLogging::critical (const std::string& message)
 
 void PHSLogging::error (const std::string& message)
 {
+#ifdef PHS_DEBUG
+   std::cerr << "Log error: \"" << message << "\"" << std::endl;
+#endif
    if (myLogging.rootLogger) {
       myLogging.rootLogger->error(message);
    }
@@ -50,6 +63,9 @@ void PHSLogging::error (const std::string& message)
 
 void PHSLogging::warning (const std::string& message)
 {
+#ifdef PHS_DEBUG
+   std::cerr << "Log warning: \"" << message << "\"" << std::endl;
+#endif
    if (myLogging.rootLogger) {
       myLogging.rootLogger->warning(message);
    }
@@ -57,6 +73,9 @@ void PHSLogging::warning (const std::string& message)
 
 void PHSLogging::notice (const std::string& message)
 {
+#ifdef PHS_DEBUG
+   std::cerr << "Log notice: \"" << message << "\"" << std::endl;
+#endif
    if (myLogging.rootLogger) {
       myLogging.rootLogger->notice(message);
    }
@@ -64,6 +83,9 @@ void PHSLogging::notice (const std::string& message)
 
 void PHSLogging::information (const std::string& message)
 {
+#ifdef PHS_DEBUG
+   std::cerr << "Log information: \"" << message << "\"" << std::endl;
+#endif
    if (myLogging.rootLogger) {
       myLogging.rootLogger->information(message);
    }
@@ -71,6 +93,9 @@ void PHSLogging::information (const std::string& message)
 
 void PHSLogging::debug (const std::string& message)
 {
+#ifdef PHS_DEBUG
+   std::cerr << "Log debug: \"" << message << "\"" << std::endl;
+#endif
    if (myLogging.rootLogger) {
       myLogging.rootLogger->debug(message);
    }
@@ -78,6 +103,9 @@ void PHSLogging::debug (const std::string& message)
 
 void PHSLogging::trace (const std::string& message)
 {
+#ifdef PHS_DEBUG
+   std::cerr << "Log trace: \"" << message << "\"" << std::endl;
+#endif
    if (myLogging.rootLogger) {
       myLogging.rootLogger->trace(message);
    }

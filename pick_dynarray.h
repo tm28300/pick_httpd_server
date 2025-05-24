@@ -26,6 +26,8 @@ public:
    void replace (std::string string_value, rang_num_t field_num = 0, rang_num_t value_num = 0, rang_num_t subvalue_num = 0);
    void insert (std::string string_value, rang_num_t field_num, rang_num_t value_num = 0, rang_num_t subvalue_num = 0);
 
+   pick_dynarray& operator += (const std::string& str);
+
    size_t length () const
    {
       return content ? strlen (content) : 0;

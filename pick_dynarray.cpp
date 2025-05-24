@@ -37,8 +37,8 @@ void pick_dynarray::add_key_value (rang_num_t field_num, const std::string key, 
    }
    else
    {
-      insert (key, field_num, -mv_key);
-      insert (value, field_num, -mv_key);
+      insert (key, field_num, -mv_key); // -mv_key car la valeur est en négatif dans le résultat
+      insert (value, field_num + 1, -mv_key);
    }
 }
 
@@ -84,6 +84,17 @@ void pick_dynarray::insert (std::string string_value, rang_num_t field_num, rang
       QMFree (content);
    }
    content = result_ptr;
+}
+
+pick_dynarray& pick_dynarray::operator += (const std::string& str)
+{
+   char *new_content = (char *) realloc (content, length () + 1 + str.length ());
+   if (new_content == NULL) {
+      throw std::bad_alloc ();
+   }
+   content = new_content;
+   strcat (new_content, str.c_str ());
+   return *this;
 }
 
 pick_dynarray::rang_num_t pick_dynarray::dcount (const std::string sep_char) const
