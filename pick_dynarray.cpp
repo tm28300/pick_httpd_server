@@ -86,11 +86,26 @@ void pick_dynarray::insert (std::string string_value, rang_num_t field_num, rang
    content = result_ptr;
 }
 
+pick_dynarray& pick_dynarray::operator = (const char *original_string)
+{
+   if (content != NULL) {
+      QMFree (content);
+   }
+   content = strdup (original_string);
+   if (content == NULL) {
+      throw std::bad_alloc ();
+   }
+   return *this;
+}
+
 pick_dynarray& pick_dynarray::operator += (const std::string& str)
 {
    char *new_content = (char *) realloc (content, length () + 1 + str.length ());
    if (new_content == NULL) {
       throw std::bad_alloc ();
+   }
+   if (content == NULL) {
+      new_content [0] = '\0';
    }
    content = new_content;
    strcat (new_content, str.c_str ());

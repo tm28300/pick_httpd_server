@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <Poco/UTF8Encoding.h>
+#include <Poco/MacRomanEncoding.h>
+
 #include "pick_httpd_server.h"
 #include "pick_httpd_server_config.h"
 
@@ -11,12 +14,13 @@
 static void print_memory_full ();
 static void free_url_config (struct url_config_struct *url_config);
 static const char *check_pick_object_name (const char* object_name);
-static struct url_config_struct * read_url_config (config_setting_t *config_url_elem);
+static struct url_config_struct *read_url_config (config_setting_t *config_url_elem);
 
 // Constants
 
 static const char config_file_name [] = "/etc/pick_httpd_server.cfg";
 static const char config_path_pick_account [] = "pick.account";
+static const char config_path_pick_encoding [] = "pick.encoding";
 static const char config_path_httpd_port [] = "httpd.port";
 static const unsigned char pattern_object_name [] = "^[[:alpha:]][[:alnum:]._-]*$";
 
@@ -24,6 +28,8 @@ static const unsigned char pattern_object_name [] = "^[[:alpha:]][[:alnum:]._-]*
 
 config_t config_pick_httpd_server;
 std::string config_pick_account;
+Poco::TextEncoding *config_pick_encoding = NULL;
+
 int config_http_port;
 struct url_config_struct *first_url_config = NULL;
 
@@ -172,7 +178,7 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
                      fprintf (stderr, "error reading method %d\n", method_index);
                      error_config = true;
                   }
-                  else if (strcasecmp (method_elem, "GET") != 0 && strcasecmp (method_elem, "POST") != 0 && strcasecmp (method_elem, "PUT") != 0 && strcasecmp (method_elem, "PATCH") != 0 && strcasecmp (method_elem, "DELETE")) {
+                  else if (strcasecmp (method_elem, "GET") != 0 && strcasecmp (method_elem, "POST") != 0 && strcasecmp (method_elem, "PUT") != 0 && strcasecmp (method_elem, "PATCH") != 0 && strcasecmp (method_elem, "DELETE") && strcasecmp (method_elem, "OPTIONS")) {
                      fprintf (stderr, "unknown method %d\n", method_index);
                      error_config = true;
                      method_elem = NULL;
@@ -273,15 +279,18 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
 
 bool phs_config_read ()
 {
+   //Ouverture du fichier
    if (config_read_file (&config_pick_httpd_server, config_file_name) != CONFIG_TRUE) {
       fprintf (stderr, "Can't read configuration file %s:%d %s\n", config_file_name, config_error_line (&config_pick_httpd_server), config_error_text (&config_pick_httpd_server));
       return false;
    }
+
    // httpd.port
    if (config_lookup_int (&config_pick_httpd_server, config_path_httpd_port, &config_http_port) != CONFIG_TRUE) {
       fprintf (stderr, "Can't find configuration %s in file %s:%d %s\n", config_path_httpd_port, config_error_file (&config_pick_httpd_server), config_error_line (&config_pick_httpd_server), config_error_text (&config_pick_httpd_server));
       return false;
    }
+
    // httpd.env
    config_setting_t *config_httpd_env = config_lookup (&config_pick_httpd_server, "httpd.env");
    if (config_httpd_env != NULL) {
@@ -318,6 +327,21 @@ bool phs_config_read ()
    if (config_pick_account.empty ()) {
       fprintf (stderr, "OpenQM account not configured\n");
       return false;
+   }
+
+   // pick.encoding, Par défaut il n'y a pas de conversion
+   const char* string_pick_encoding;
+   if (config_lookup_string (&config_pick_httpd_server, config_path_pick_encoding, &string_pick_encoding) == CONFIG_TRUE) {
+      try {
+         if (string_pick_encoding == std::string("MacRoman")) {
+            config_pick_encoding = new Poco::MacRomanEncoding ();
+         } else {
+            config_pick_encoding = &Poco::TextEncoding::byName (string_pick_encoding);
+         }
+      } catch (const Poco::NotFoundException& e) {
+         fprintf (stderr, "Unknown encoding %s\n", string_pick_encoding);
+         return false;
+      }
    }
 
    // url

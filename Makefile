@@ -2,7 +2,7 @@
 DEBUG_FLAG=-DPHS_DEBUG
 EXEC_NAME=pick_httpd_server
 OBJS=$(patsubst %.c, %.o, $(wildcard *.c)) $(patsubst %.cpp, %.o, $(wildcard *.cpp))
-ifndef $(wildcard /home/thierry/openqm/openqm.account/)
+ifeq ($(wildcard /home/thierry/openqm/openqm.account/),)
 OPENQM_ROOT=/usr/qmsys
 QMCLILIB=qmcli
 else
@@ -11,7 +11,7 @@ QMCLILIB=qmcli64
 endif
 INCLUDES=-I$(OPENQM_ROOT)/SYSCOM
 CCFLAGS=-Wall -g
-LT_LDFLAGS=-L$(OPENQM_ROOT)/bin -lmicrohttpd -lconfig -lpcre2-8 -l$(QMCLILIB) -lstdc++ -lPocoFoundation
+LT_LDFLAGS=-L$(OPENQM_ROOT)/bin -lmicrohttpd -lconfig -lpcre2-8 -l$(QMCLILIB) -lstdc++ -lPocoFoundation -lPocoEncodings
 DEPDIR := .deps
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.d
 

@@ -1,6 +1,7 @@
 #include <libconfig.h>
 #include <vector>
 #include <string>
+#include <Poco/TextEncoding.h>
 
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
@@ -23,6 +24,7 @@ struct url_config_struct {
 
 extern config_t config_pick_httpd_server;
 extern std::string config_pick_account;
+extern Poco::TextEncoding *config_pick_encoding;
 extern int config_http_port;
 extern struct url_config_struct *first_url_config;
 

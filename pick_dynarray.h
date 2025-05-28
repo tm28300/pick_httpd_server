@@ -26,6 +26,11 @@ public:
    void replace (std::string string_value, rang_num_t field_num = 0, rang_num_t value_num = 0, rang_num_t subvalue_num = 0);
    void insert (std::string string_value, rang_num_t field_num, rang_num_t value_num = 0, rang_num_t subvalue_num = 0);
 
+   pick_dynarray& operator = (const char *original_string);
+   pick_dynarray& operator = (const std::string &original_string)
+   {
+      return *this = original_string.c_str ();
+   }
    pick_dynarray& operator += (const std::string& str);
 
    size_t length () const
@@ -42,5 +47,9 @@ public:
    static constexpr const char *value_mark_string    = "\xfd";
    static constexpr const char *field_mark_string    = "\xfe";
 private:
+   // Currently not used
+   pick_dynarray (const pick_dynarray &original_dynarray);
+   pick_dynarray& operator = (const pick_dynarray &original_dynarray);
+
    char *content;
 };

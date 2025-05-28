@@ -1,9 +1,13 @@
 #include <algorithm>
 #include <sstream>
 #include <cstring>
+#include <iomanip>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+#include <Poco/UTF8Encoding.h>
+#include <Poco/TextConverter.h>
 
 #include <qmclilib.h>
 
@@ -20,6 +24,35 @@ static const size_t post_buffer_size = post_max_size / 32;
 static const size_t querystring_max_size = 16384;
 static const char protocol_http [] = "http";
 static const char protocol_https [] = "https";
+static const Poco::UTF8Encoding utf8_encoding;
+
+// Fonctions non membres
+
+std::string input_conversion (const std::string in_string)
+{
+   if (config_pick_encoding != NULL) {
+      Poco::TextConverter converter (utf8_encoding, *config_pick_encoding, '\x1f');
+      std::string out_string;
+
+      int error_count = converter.convert (in_string, out_string);
+      if (error_count > 0 || out_string.find('\x1f') != std::string::npos) {
+         throw std::range_error (std::string ("String convertion from ") + utf8_encoding.canonicalName () + " to " + config_pick_encoding->canonicalName ());
+      }
+      return out_string;
+   }
+   return in_string;
+}
+
+std::string output_conversion (const std::string in_string)
+{
+   if (config_pick_encoding != NULL) {
+      Poco::TextConverter converter (*config_pick_encoding, utf8_encoding);
+      std::string out_string;
+      converter.convert (in_string, out_string);
+      return out_string;
+   }
+   return in_string;
+}
 
 // Fonctions membres de la classe
 
@@ -75,6 +108,9 @@ enum MHD_Result pick_connection::pick_to_connection (void *cls,
    pick_connection *current_pick_connection = NULL;
 
    if (*pick_connection_cls == NULL) {
+#if PHS_DEBUG
+      std::cerr << "Création pick_connection" << std::endl;
+#endif
       current_pick_connection = new pick_connection ();
       *pick_connection_cls = current_pick_connection;
       result = current_pick_connection->initialize (cls, connection, url, method, version, upload_data, upload_data_size);
@@ -97,6 +133,28 @@ enum MHD_Result pick_connection::pick_to_connection (void *cls,
          result = MHD_YES;
       }
       else {
+         if (current_pick_connection->fetch_post_json) {
+            try {
+               std::string post_dynarray = current_pick_connection->post_dynarray;
+#if PHS_DEBUG
+               std::cerr << "Contenu du json avant conversion : ";
+               for (auto it = post_dynarray.begin(); it != post_dynarray.end(); ++it) {
+                  std::cerr << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(*it);
+               }
+               std::cerr << std::endl;
+#endif
+
+               std::string post_pick_encoding = input_conversion (post_dynarray);
+               current_pick_connection->post_dynarray = post_pick_encoding;
+            }
+            catch (const std::range_error& e) {
+               // Impossible de convertir un caractère
+               PHSLogging::fatal (std::string ("Can't convert json, ") + e.what ());
+               http_sc_t http_status_code = MHD_HTTP_BAD_REQUEST;
+               struct MHD_Response *response = current_pick_connection->make_default_error_page (connection, http_status_code);
+               return current_pick_connection->send_response (connection, http_status_code, response);
+            }
+         }
          result = current_pick_connection->process (cls, connection, url, method, version, upload_data, upload_data_size);
       }
    }
@@ -161,6 +219,9 @@ enum MHD_Result pick_connection::initialize (void *cls,
    if (method == "GET") {
       connection_type = connection_t::GET;
    }
+   else if (method == "OPTIONS") {
+      connection_type = connection_t::OPTIONS;
+   }
    else {
       // Gestion des paramètres post
       if (method == "PUT") {
@@ -221,13 +282,22 @@ enum MHD_Result pick_connection::iterate_post (void *postinfo_cls,
          current_pick_connection->set_error_exception (new std::length_error ("Post data too big"));
          return MHD_NO;
       }
-      current_pick_connection->post_dynarray.add_key_value (1, key, data);
+      std::string key_pick_encoding = input_conversion (key);
+      std::string data_pick_encoding = input_conversion (data);
+      current_pick_connection->post_dynarray.add_key_value (1, key_pick_encoding, data_pick_encoding);
+   }
+   catch (const std::range_error& e) {
+      // Impossible de convertir un caractère
+      current_pick_connection->set_error_exception (new std::range_error (e));
+      return MHD_NO;
    }
    catch (const std::bad_alloc& e) {
+      // Mémoire insuffisante
       current_pick_connection->set_error_exception (new std::bad_alloc (e));
       return MHD_NO;
    }
    catch (const std::exception& e) {
+      // Autre execption
       current_pick_connection->set_error_exception (new std::exception (e));
       return MHD_NO;
    }
@@ -246,10 +316,12 @@ bool pick_connection::post_json_process (const char *upload_data, size_t upload_
       post_dynarray += std::string (upload_data, upload_data_size);
    }
    catch (const std::bad_alloc& e) {
+      // Mémoire insuffisante
       set_error_exception (new std::bad_alloc (e));
       return false;
    }
    catch (const std::exception& e) {
+      // Autre execption
       set_error_exception (new std::exception (e));
       return false;
    }
@@ -385,8 +457,11 @@ enum MHD_Result pick_connection::process (void *cls,
                http_status_code = MHD_HTTP_OK;
             }
 
-            // Complete web page
-            response = MHD_create_response_from_buffer (strlen (resp_http_output), resp_http_output, MHD_RESPMEM_MUST_FREE);
+            // Complete web page (only text page from Pick - text, html, json, ...)
+            std::string http_output_utf8 = output_conversion (resp_http_output);
+            free (resp_http_output);
+            resp_http_output = NULL;
+            response = MHD_create_response_from_buffer (http_output_utf8.length (), (void *) http_output_utf8.c_str (), MHD_RESPMEM_MUST_COPY);
             if (response == NULL) {
                PHSLogging::fatal ("Can't create response from subroutine response");
                http_status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
@@ -411,19 +486,23 @@ enum MHD_Result pick_connection::process (void *cls,
       }
    }
    catch (const std::bad_alloc& e) {
+      // Mémoire insuffisante
       PHSLogging::fatal ("Memory full");
       http_status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
    }
    catch (const std::length_error& e) {
+      // En-tête, paramètre get ou payload post trop long
       PHSLogging::fatal ("Parameters to long");
       http_status_code = MHD_HTTP_CONTENT_TOO_LARGE;
       // Pourait être aussi MHD_HTTP_REQUEST_HEADER_FIELDS_TOO_LARGE
    }
    catch (const std::invalid_argument& e) {
+      // Nom de champ interdit dans les paramètres de la requête
       PHSLogging::fatal (e.what ());
       http_status_code = MHD_HTTP_BAD_REQUEST;
    }
    catch (const std::exception& e) {
+      // Autre execption
       PHSLogging::fatal (std::string ("Other problem ") + e.what ());
       http_status_code = MHD_HTTP_INTERNAL_SERVER_ERROR;
    }
@@ -451,10 +530,12 @@ enum MHD_Result pick_connection::iterate_header (void *pick_connection_cls,
          current_pick_connection->req_header_in.add_key_value (1, key, value);
       }
       catch (const std::bad_alloc& e) {
+         // Mémoire insuffisante
          current_pick_connection->set_error_exception (new std::bad_alloc (e));
          return MHD_NO;
       }
       catch (const std::exception& e) {
+         // Autre execption
          current_pick_connection->set_error_exception (new std::exception (e));
          return MHD_NO;
       }
@@ -480,13 +561,22 @@ enum MHD_Result pick_connection::iterate_querystring (void *pick_connection_cls,
          current_pick_connection->set_error_exception (new std::length_error ("Query string too long"));
          return MHD_NO;
       }
-      current_pick_connection->req_query_string.add_key_value (1, key, value);
+      std::string key_pick_encoding = input_conversion (key);
+      std::string value_pick_encoding = input_conversion (value);
+      current_pick_connection->req_query_string.add_key_value (1, key_pick_encoding, value_pick_encoding);
+   }
+   catch (const std::range_error& e) {
+      // Impossible de convertir un caractère
+      current_pick_connection->set_error_exception (new std::range_error (e));
+      return MHD_NO;
    }
    catch (const std::bad_alloc& e) {
+      // Mémoire insuffisante
       current_pick_connection->set_error_exception (new std::bad_alloc (e));
       return MHD_NO;
    }
    catch (const std::exception& e) {
+      // Autre execption
       current_pick_connection->set_error_exception (new std::exception (e));
       return MHD_NO;
    }

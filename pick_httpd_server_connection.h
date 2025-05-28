@@ -23,11 +23,12 @@ public:
 private:
    typedef unsigned int http_sc_t;
    enum class connection_t {
-      GET,
-      POST,
-      PUT,
       DELETE,
-      PATCH
+      GET,
+      OPTIONS,
+      PATCH,
+      POST,
+      PUT
    };
 
    pick_connection ();
