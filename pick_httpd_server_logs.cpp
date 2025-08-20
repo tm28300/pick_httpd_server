@@ -16,7 +16,7 @@ PHSLogging::PHSLogging ()
 {
    // Créer un canal de fichier avec rotation journalière
    fileChannel = new FileChannel;
-   fileChannel->setProperty ("path", "/var/log/pick_httpd_server.log");
+   fileChannel->setProperty ("path", "/var/log/pick_httpd_server/pick_httpd_server.log");
    fileChannel->setProperty ("rotation", "daily");
    fileChannel->setProperty ("archive", "timestamp");
    fileChannel->setProperty ("purgeCount", "14"); // Garder les logs des 14 derniers jours

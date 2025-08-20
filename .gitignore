@@ -50,4 +50,9 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Editor
+.*.sw?
+
+# Spécifique au projet
 pick_httpd_server

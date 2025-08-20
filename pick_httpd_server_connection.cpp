@@ -255,7 +255,7 @@ enum MHD_Result pick_connection::initialize (void *cls,
                iterate_post,
                (void *) this);
          if (post_processor == NULL) {
-            PHSLogging::fatal ("Can't create post processor");
+            PHSLogging::fatal ("Can't create post processor (out of memory, unsupported encoding)");
             return MHD_NO;
          }
       }
