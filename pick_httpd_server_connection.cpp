@@ -237,16 +237,35 @@ enum MHD_Result pick_connection::initialize (void *cls,
          connection_type = connection_t::POST;
       }
 
-      const char *content_type = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, "Content-Type");
+      const char *content_type_header = MHD_lookup_connection_value (connection, MHD_HEADER_KIND, "Content-Type");
 
 #ifdef PHS_DEBUG
-      std::cerr << "content_type=\"" << content_type << "\"" << std::endl;
+      std::cerr << "content_type=\"" << (content_type_header ? content_type_header : "NULL") << "\"" << std::endl;
 #endif
 
-      if (content_type != NULL && strcmp (content_type, "application/json") == 0) {
-         fetch_post_json = true;
+      std::string content_type_main;
+      if (content_type_header != NULL) {
+         // Extraire avant le ';'
+         const char *semicolon = strchr(content_type_header, ';');
+         if (semicolon) {
+            content_type_main.assign(content_type_header, semicolon - content_type_header);
+         } else {
+            content_type_main = content_type_header;
+         }
+         // Supprimer les espaces à la fin
+         size_t end = content_type_main.find_last_not_of(" \t");
+         if (end != std::string::npos) {
+            content_type_main = content_type_main.substr(0, end + 1);
+         } else {
+            content_type_main.clear();
+         }
       }
-      else {
+
+      if (!content_type_main.empty() && content_type_main == "application/json") {
+         fetch_post_json = true;
+      } else if (!content_type_main.empty() &&
+                 (content_type_main == "application/x-www-form-urlencoded" ||
+                  content_type_main == "multipart/form-data")) {
 #ifdef PHS_DEBUG
          printf ("Create post processor\n");
 #endif
@@ -258,6 +277,11 @@ enum MHD_Result pick_connection::initialize (void *cls,
             PHSLogging::fatal ("Can't create post processor (out of memory, unsupported encoding)");
             return MHD_NO;
          }
+      } else {
+         // Content-Type non supporté
+         http_sc_t http_status_code = MHD_HTTP_UNSUPPORTED_MEDIA_TYPE;
+         struct MHD_Response* response = make_default_error_page(connection, http_status_code);
+         return send_response(connection, http_status_code, response);
       }
    }
 
@@ -473,7 +497,7 @@ enum MHD_Result pick_connection::process (void *cls,
             pick_dynarray header_out_values (header_out_pda.extract (2));
             pick_dynarray::rang_num_t field_numbers_hout = header_out_fields.dcount (pick_dynarray::value_mark_string);
 
-            for (pick_dynarray::rang_num_t field_number = 0 ; field_number < field_numbers_hout ; field_number++) 
+            for (pick_dynarray::rang_num_t field_number = 0 ; field_number < field_numbers_hout ; field_number++)
             {
                std::string header_field = header_out_fields.extract (1, field_number + 1, 1);
                std::string header_value = header_out_values.extract (1, field_number + 1, 1);
@@ -716,6 +740,9 @@ struct MHD_Response *pick_connection::make_default_error_page (struct MHD_Connec
          break;
       case MHD_HTTP_CONTENT_TOO_LARGE:     // 413
          error_message = "Content too large";
+         break;
+      case MHD_HTTP_UNSUPPORTED_MEDIA_TYPE: // 415
+         error_message = "Unsupported Media Type";
          break;
       case MHD_HTTP_INTERNAL_SERVER_ERROR: // 500
          error_message = "Internal server error";

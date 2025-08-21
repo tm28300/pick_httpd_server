@@ -3,6 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Pour getuid
+#include <unistd.h>
+#include <sys/types.h>
+#include <cstdlib>
+
 #include <Poco/UTF8Encoding.h>
 #include <Poco/MacRomanEncoding.h>
 
@@ -18,7 +23,6 @@ static struct url_config_struct *read_url_config (config_setting_t *config_url_e
 
 // Constants
 
-static const char config_file_name [] = "/etc/pick_httpd_server.cfg";
 static const char config_path_pick_account [] = "pick.account";
 static const char config_path_pick_encoding [] = "pick.encoding";
 static const char config_path_httpd_port [] = "httpd.port";
@@ -279,6 +283,24 @@ struct url_config_struct * read_url_config (config_setting_t *config_url_elem)
 
 bool phs_config_read ()
 {
+   char config_file_name[512] = "";
+
+   // Déterminer le chemin du fichier de configuration selon l'utilisateur
+   if (config_file_name[0] == '\0') {
+      if (getuid() == 0) {
+         strncpy(config_file_name, "/etc/pick_httpd_server.cfg", sizeof(config_file_name)-1);
+         config_file_name[sizeof(config_file_name)-1] = '\0';
+      } else {
+         const char* home = getenv("HOME");
+         if (home && home[0] != '\0') {
+            snprintf(config_file_name, sizeof(config_file_name), "%s/conf/pick_httpd_server.cfg", home);
+         } else {
+            strncpy(config_file_name, "pick_httpd_server.cfg", sizeof(config_file_name)-1);
+            config_file_name[sizeof(config_file_name)-1] = '\0';
+         }
+      }
+   }
+
    //Ouverture du fichier
    if (config_read_file (&config_pick_httpd_server, config_file_name) != CONFIG_TRUE) {
       fprintf (stderr, "Can't read configuration file %s:%d %s\n", config_file_name, config_error_line (&config_pick_httpd_server), config_error_text (&config_pick_httpd_server));

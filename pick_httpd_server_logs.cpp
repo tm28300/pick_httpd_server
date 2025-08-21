@@ -1,10 +1,17 @@
 #include <string>
 
+// Pour getuid
+#include <unistd.h>
+#include <sys/types.h>
+#include <cstdlib>
+
 #ifdef PHS_DEBUG
 #include <iostream>
 #endif
 
+
 #include <Poco/Util/HelpFormatter.h>
+#include <sys/stat.h>
 
 #include "pick_httpd_server_logs.h"
 
@@ -14,9 +21,29 @@ PHSLogging PHSLogging::myLogging;
 
 PHSLogging::PHSLogging ()
 {
+   // Déterminer le chemin du fichier de log selon l'utilisateur
+   std::string logPath;
+   if (getuid() == 0) {
+      // root
+      logPath = "/var/log/pick_httpd_server.log";
+   } else {
+      const char* home = getenv("HOME");
+      if (home && home[0] != '\0') {
+         std::string logDir = std::string(home) + "/log";
+         struct stat st = {0};
+         if (stat(logDir.c_str(), &st) == -1) {
+            mkdir(logDir.c_str(), 0700);
+         }
+         logPath = logDir + "/pickhttpd_server.log";
+      } else {
+         // fallback : log dans le répertoire courant
+         logPath = "pickhttpd_server.log";
+      }
+   }
+
    // Créer un canal de fichier avec rotation journalière
    fileChannel = new FileChannel;
-   fileChannel->setProperty ("path", "/var/log/pick_httpd_server/pick_httpd_server.log");
+   fileChannel->setProperty ("path", logPath);
    fileChannel->setProperty ("rotation", "daily");
    fileChannel->setProperty ("archive", "timestamp");
    fileChannel->setProperty ("purgeCount", "14"); // Garder les logs des 14 derniers jours
