@@ -1,11 +1,17 @@
 # uncomment to add many debug messages
-#DEBUG_FLAG=-DOHS_DEBUG
-EXEC_NAME=openqm_httpd_server
-OBJS=openqm_httpd_server.o openqm_httpd_server_config.o openqm_httpd_server_url.o
-OPENQM_ROOT=/home/thierry/openqm
-INCLUDES=-I$(OPENQM_ROOT)/openqm.account/SYSCOM -I$(OPENQM_ROOT)/openqm.account/gplsrc
+DEBUG_FLAG=-DPHS_DEBUG
+EXEC_NAME=pick_httpd_server
+OBJS=$(patsubst %.c, %.o, $(wildcard *.c)) $(patsubst %.cpp, %.o, $(wildcard *.cpp))
+ifeq ($(wildcard /home/thierry/openqm/openqm.account/),)
+OPENQM_ROOT=/usr/qmsys
+QMCLILIB=qmcli
+else
+OPENQM_ROOT=/home/thierry/openqm/openqm.account
+QMCLILIB=qmcli64
+endif
+INCLUDES=-I$(OPENQM_ROOT)/SYSCOM
 CCFLAGS=-Wall -g
-LT_LDFLAGS=$(OPENQM_ROOT)/openqm.account/bin/qmclilib64.o $(OPENQM_ROOT)/openqm.account/gplobj/match_template64.o -lmicrohttpd -lconfig -lpcre
+LT_LDFLAGS=-L$(OPENQM_ROOT)/bin -lmicrohttpd -lconfig -lpcre2-8 -l$(QMCLILIB) -lstdc++ -lPocoFoundation -lPocoEncodings
 DEPDIR := .deps
 DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.d
 
@@ -17,6 +23,10 @@ $(EXEC_NAME): $(OBJS)
 %.o : %.c
 %.o : %.c $(DEPDIR)/%.d | $(DEPDIR)
 	gcc $(CCFLAGS) $(DEPFLAGS) $(INCLUDES) $(DEBUG_FLAG) -c $< -o $@
+
+%.o : %.cpp
+%.o : %.cpp $(DEPDIR)/%.d | $(DEPDIR)
+	g++ $(CCFLAGS) $(DEPFLAGS) $(INCLUDES) $(DEBUG_FLAG) -c $< -o $@
 
 $(DEPDIR): ; @mkdir -p $@
 

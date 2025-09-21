@@ -12,12 +12,12 @@ This server is not intended to be called directly from the web, instead it is pr
 # Installation
 
 The software must be compiled and requires the following dependencies:
-- gcc
-- makefile
+- build-essential ou gcc makefile
 - libmicrohttpd12
-- libmicrohttpd\_dev
+- libmicrohttpd-dev
 - libconfig9
-- libconfig\_dev
+- libconfig-dev
+- libpcre2-dev
 
 Then you need to run **make** command to produce the executable file. After that, you need to manualy copy this file and create the configuration file (see below).
 
