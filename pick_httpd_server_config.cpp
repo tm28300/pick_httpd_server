@@ -295,8 +295,9 @@ bool phs_config_read ()
          if (home && home[0] != '\0') {
             snprintf(config_file_name, sizeof(config_file_name), "%s/conf/pick_httpd_server.cfg", home);
          } else {
-            strncpy(config_file_name, "pick_httpd_server.cfg", sizeof(config_file_name)-1);
-            config_file_name[sizeof(config_file_name)-1] = '\0';
+            // Pas de repli sur le répertoire courant : le serveur ne démarre pas (message indépendant du logger)
+            fprintf (stderr, "HOME environment variable is not set or is empty, can't locate configuration file (~/conf/pick_httpd_server.cfg) nor log file (~/log/pick_httpd_server.log)\n");
+            return false;
          }
       }
    }
