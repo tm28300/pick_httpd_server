@@ -8,11 +8,11 @@ This server is not intended to be called directly from the web, instead it is pr
 - A light and flexible server to respond to requests (openqm\_httpd\_server).
 - A robust, configurable and extensible server to respond securely to requests from outside (Apache httpd or other). It is up to this server to take care of the encryption of the connection via https and related standards.
 - To have a single host name to contain on the one hand the web application (static html page, application based on a framework such as ReactOS or VueJS, resources such as css, images and fonts) and On the other hand, the API which will interact with our nosql OpenQM/ScarletDME database.
-   
+
 # Installation
 
 The software must be compiled and requires the following dependencies:
-- build-essential ou gcc makefile
+- build-essential or gcc makefile
 - libmicrohttpd12
 - libmicrohttpd-dev
 - libconfig9
@@ -25,20 +25,63 @@ Then you need to run **make** command to produce the executable file. After that
 
 The server is an executable program which is configured via a configuration file. Once the program is executed in daemon, it will respond to the web requests it receives and call a routine when the url corresponds to one of those configured.
 
+## Configuration file location
+
+The server takes no command-line arguments. The location of the configuration file is determined at startup according to the user running the server (`getuid ()`):
+
+| User | Configuration file read |
+|------|-------------------------|
+| `root` (uid 0) | `/etc/pick_httpd_server.cfg` |
+| Other user, `HOME` environment variable set and not empty | `$HOME/conf/pick_httpd_server.cfg` (for example `/home/edouard/conf/pick_httpd_server.cfg`) |
+| Other user, `HOME` variable unset or empty | None: the server does not start (see below) |
+
+For a user other than `root`, there is no fallback to the current directory. If the `HOME` environment variable is unset or empty, no configuration is read: an error message is written to the standard error output (`stderr`) and the server exits with return code 2 without starting. The message does not depend on the log system, which is not initialized in this case.
+
+The `$HOME/conf` directory is not created by the server. If the file is not found or is invalid, or if `httpd.port`, `pick.account` or `url` are missing or incorrect, a message is written to the standard error output (`stderr`, not to the log file) and the server exits with return code 2. An example file is available in `example/pick_httpd_server.cfg`.
+
+## Log file
+
+Errors encountered while processing requests are written to a log file managed by Poco (`FileChannel`). The location of the file is determined when the program is initialized, before the configuration is read, according to the user running the server:
+
+| User | Log file |
+|------|----------|
+| `root` (uid 0) | `/var/log/pick_httpd_server.log` |
+| Other user, `HOME` environment variable set and not empty | `$HOME/log/pick_httpd_server.log`; the `$HOME/log` directory is created with permissions 0700 if it does not exist |
+| Other user, `HOME` variable unset or empty | None: no log file is created and the server does not start (see "Configuration file location") |
+
+The log file name is `pick_httpd_server.log` for all users. There is no fallback to the current directory.
+
+Log characteristics:
+- Minimum level: `warning`. Messages of level `fatal`, `critical`, `error` and `warning` are written; `notice`, `information`, `debug` and `trace` are ignored. The server currently writes its errors at the `fatal` level only.
+- Line format: `YYYY-MM-DD HH:MM:SS [level] message`.
+- Daily rotation, archived files are suffixed with a timestamp, and only the 14 most recent archived files are kept.
+- The path is not configurable.
+- If the server is compiled with `PHS_DEBUG`, messages are also displayed on `stderr`.
+
 ## Configuration
 
 The configuration file has a syntax [libconfig](http://hyperrealm.github.io/libconfig/). At the first level the configuration file must contain:
 
 ### httpd
 
-Allows you to define server settings. It is composed of :
+Allows you to define server settings. It is composed of:
 - port = Port number to which the server responds.
 - env: An array that contains the server environment variables. For example QMCONFIG = the path and name of the OpenQM configuration file alternative to /etc/openqm.conf.
 
-### openqm
+### pick
 
-Allows you to define OpenQM parameters. It is composed of the single variable:
-- account = Name of the OpenQM account in which the routines are cataloged.
+Allows you to define the settings of the Pick database (OpenQM/ScarletDME). This group is named `pick` and contains:
+- `account`: name of the Pick account in which the routines are cataloged (`pick.account` parameter). It is mandatory and must not be empty, otherwise the server does not start.
+- `encoding`: character encoding used on the Pick side (`pick.encoding` parameter). It is optional. Received data (headers, query string, POST data) is converted from UTF-8 to this encoding before the routine is called, and the routine's response is converted from this encoding to UTF-8. If the parameter is missing, no conversion is performed. The `MacRoman` value is handled explicitly; other values are resolved by name through `Poco::TextEncoding::byName`. An unknown encoding name prevents the server from starting. During the conversion from UTF-8 to the Pick encoding, a character that cannot be represented causes a conversion error and the request is not passed to the routine.
+
+Example (see `example/pick_httpd_server.cfg`):
+
+```
+pick: {
+	account="TM.WEB";
+	encoding="MacRoman";
+};
+```
 
 ### url
 
@@ -55,17 +98,17 @@ path and pattern cannot be defined at the same time. The url '/' cannot be confi
 ## Routines
 
 The routine called to respond to a request requires 13 parameters. The first 10 are used in input:
-- auth\_type :
+- auth\_type
 - hostname
 - header\_in
 - query\_string
 - post\_dynarray
-- remote\_info : Not implemented. In the future will contain the IP address and port of the client that called the server.
+- remote\_info: Not implemented. In the future will contain the IP address and port of the client that called the server.
 - remote\_user
 - method
 - uri
-- server\_info : IP address, port and protocol of the server in a dynamic array with two attributes linked in multi-values. The first attribute contains the parameter name and the second its value. The implementation is partial and this variable only contains the protocol (http or https).
-  
+- server\_info: IP address, port and protocol of the server in a dynamic array with two attributes linked in multi-values. The first attribute contains the parameter name and the second its value. The implementation is partial and this variable only contains the protocol (http or https).
+
 Then 3 input/output parameters:
 - http\_output
 - http\_status
@@ -80,14 +123,14 @@ Before and after calling the routine, the software performs the following checks
 - If the method was not authorized in the configuration file, the http status returned is 405 (method not allowed).
 - If the request contains a query string the following checks are processed:
     - If in the configuration file there is a get\_param table and the parameter name is missing from the values list, the http status returned is 400 (bad request).
-    - If the value of the parameter is greater than 16KB, the http status returned is 400 (bad request).
+    - If the cumulative size of the query string (parameter names and values, including their separators) exceeds 16 KB (16384 bytes), the http status intended by the code is 413 (content too large). Note: `initialize_request` rethrows the stored exception with `throw *error_exception;` using the static type `std::exception` (object slicing); the `std::length_error` handler is therefore probably not reached from this path and the status actually returned may be 500. This needs to be checked in the code.
 - If the name of the called host is missing, the http status returned is 400 (bad request).
 - If the server cannot connect to OpenQM, the http status returned is 503 (service unavailable).
 - After call the routine the http\_status parameter isn't modified, the http status returned is 500 (internal server error).
 
 If the routine returns an empty response and an http error status code or if the software generates an http error status code then the server will generate a default error page. This error page is a minimalist html page containing a title " Error" and containing the error message in English.
 
-When the software encounters a problem generating an http error status and a detailed message in syslog.
+When the software encounters a problem that generates an http error status, a detailed message is written to the Poco log file (not to syslog). See the "Log file" section for its location.
 
 # Limitations
 

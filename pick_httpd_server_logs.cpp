@@ -34,10 +34,11 @@ PHSLogging::PHSLogging ()
          if (stat(logDir.c_str(), &st) == -1) {
             mkdir(logDir.c_str(), 0700);
          }
-         logPath = logDir + "/pickhttpd_server.log";
+         logPath = logDir + "/pick_httpd_server.log";
       } else {
-         // fallback : log dans le répertoire courant
-         logPath = "pickhttpd_server.log";
+         // Pas de repli sur le répertoire courant : pas de logger (rootLogger reste nul), l'erreur
+         // est affichée sur stderr par phs_config_read et le serveur ne démarre pas
+         return;
       }
    }
 
